@@ -429,8 +429,8 @@ class ScaleneOutput:
             # restore its name, as in "[12]".
             fname_print = fname
             import re
-
-            if result := re.match("ipython-input-([0-9]+)-.*", fname_print):
+            result = re.match("ipython-input-([0-9]+)-.*", fname_print)
+            if result:
                 fname_print = Filename(f"[{result.group(1)}]")
 
             # Print header.
@@ -646,7 +646,8 @@ class ScaleneOutput:
             avg_mallocs: Dict[LineNumber, float] = defaultdict(float)
             for line_no in stats.bytei_map[fname]:
                 n_malloc_mb = stats.memory_aggregate_footprint[fname][line_no]
-                if count := stats.memory_malloc_count[fname][line_no]:
+                count = stats.memory_malloc_count[fname][line_no]
+                if count:
                     avg_mallocs[line_no] = n_malloc_mb / count
                 else:
                     # Setting to n_malloc_mb addresses the edge case where this allocation is the last line executed.

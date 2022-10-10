@@ -69,7 +69,7 @@ from scalene.scalene_parseargs import ScaleneParseArgs, StopJupyterExecution
 from scalene.scalene_sigqueue import ScaleneSigQueue
 
 MINIMUM_PYTHON_VERSION_MAJOR = 3
-MINIMUM_PYTHON_VERSION_MINOR = 8
+MINIMUM_PYTHON_VERSION_MINOR = 7
 
 
 def require_python(version: Tuple[int, int]) -> None:
@@ -223,7 +223,11 @@ class Scalene:
 
     __orig_signal = signal.signal
     __orig_exit = os._exit
-    __orig_raise_signal = signal.raise_signal
+    #__orig_raise_signal = signal.raise_signal
+    if sys.version_info < (3, 8):
+        __orig_raise_signal = lambda s: os.kill(os.getpid(), s)
+    else:
+        __orig_raise_signal = signal.raise_signal
 
     __orig_kill = os.kill
     if sys.platform != "win32":
@@ -308,7 +312,8 @@ class Scalene:
             # If we are not in a file we should be tracing, return.
             if not Scalene.should_trace(ff):
                 return None
-            if f := Scalene.on_stack(frame, fname, lineno):
+            f = Scalene.on_stack(frame, fname, lineno)
+            if f:
                 # We are still on the same line, but somewhere up the stack
                 # (since we returned when it was the same line in this
                 # frame). Stop tracing in this frame.
@@ -1459,8 +1464,8 @@ class Scalene:
             # Profiling code created in a Jupyter cell:
             # create a file to hold the contents.
             import IPython
-
-            if result := re.match("ipython-input-([0-9]+)-.*", filename):
+            result = re.match("ipython-input-([0-9]+)-.*", filename)
+            if result:
                 # Write the cell's contents into the file.
                 cell_contents = (
                     IPython.get_ipython().history_manager.input_hist_raw[
@@ -1473,9 +1478,10 @@ class Scalene:
         # If (a) `profile-only` was used, and (b) the file matched
         # NONE of the provided patterns, don't profile it.
         profile_only_set = set(Scalene.__args.profile_only.split(","))
-        if not_found_in_profile_only := profile_only_set and all(
+        not_found_in_profile_only = profile_only_set and all(
             prof not in filename for prof in profile_only_set
-        ):
+        )
+        if not_found_in_profile_only:
             return False
         # Now we've filtered out any non matches to profile-only patterns.
         # If `profile-all` is specified, profile this file.
