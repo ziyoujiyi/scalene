@@ -20,6 +20,16 @@ from scalene.scalene_leak_analysis import ScaleneLeakAnalysis
 from scalene.scalene_statistics import Filename, LineNumber, ScaleneStatistics
 from scalene.syntaxline import SyntaxLine
 
+import logging
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+formatter = logging.Formatter(
+    fmt='%(asctime)s %(levelname)-2s [%(filename)s:%(lineno)d] %(message)s')
+ch = logging.StreamHandler()
+ch.setFormatter(formatter)
+logger.addHandler(ch)
+
 
 class ScaleneOutput:
 
@@ -530,6 +540,9 @@ class ScaleneOutput:
                 continue
             # Print out the profile for the source, line by line.
             full_fname = os.path.normpath(os.path.join(program_path, fname))
+            if not os.access(full_fname, os.R_OK):
+                logger.warning("file: {} not exist".format(full_fname))
+                continue
             with open(full_fname, "r", encoding="utf-8") as source_file:
                 # We track whether we should put in ellipsis (for reduced profiles)
                 # or not.
