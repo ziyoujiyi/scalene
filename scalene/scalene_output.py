@@ -20,15 +20,7 @@ from scalene.scalene_leak_analysis import ScaleneLeakAnalysis
 from scalene.scalene_statistics import Filename, LineNumber, ScaleneStatistics
 from scalene.syntaxline import SyntaxLine
 
-import logging
-
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-formatter = logging.Formatter(
-    fmt='%(asctime)s %(levelname)-2s [%(filename)s:%(lineno)d] %(message)s')
-ch = logging.StreamHandler()
-ch.setFormatter(formatter)
-logger.addHandler(ch)
+from scalene.scalene_magics import logger
 
 
 class ScaleneOutput:
@@ -76,7 +68,9 @@ class ScaleneOutput:
             # as they are above some threshold MB in size.
             print_top_mallocs_count = 5
             print_top_mallocs_threshold_mb = 1
+            logger.info(title)
             for malloc_lineno, value in mallocs.items():
+                logger.info("malloc_lineno: {}, value: {}".format(malloc_lineno, value))
                 # Don't print lines with less than the threshold MB allocated.
                 if value <= print_top_mallocs_threshold_mb:
                     break
@@ -673,6 +667,7 @@ class ScaleneOutput:
             # Compute (really, aggregate) PEAK memory consumption.
             peak_mallocs: Dict[LineNumber, float] = defaultdict(float)
             for line_no in stats.bytei_map[fname]:
+                logger.info("stats.memory_max_footprint - fname: {}".format(fname))
                 peak_mallocs[line_no] = stats.memory_max_footprint[fname][
                     line_no
                 ]

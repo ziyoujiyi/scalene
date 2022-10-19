@@ -20,4 +20,11 @@
 #define USE_COMPRESSED_PTRS 0
 #define USE_SIZE_CACHES 0  // 1
 
+//#define __DEBUG
+#ifdef __DEBUG
+#define DEBUG(format, args...) printf("FILE: " __FILE__ ", LINE: %d: " format "\n", __LINE__, ##args)  // __VA_ARGS__ -> args
+#else 
+#define DEBUG(format, ...)
+#endif
+
 #endif

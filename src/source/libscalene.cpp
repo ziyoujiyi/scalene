@@ -138,7 +138,11 @@ class MakeLocalAllocator {
   }
 
   static inline void *local_malloc(void *ctx, size_t len) {
+    static int local_malloc_cnt;
+    local_malloc_cnt++;
+
     MallocRecursionGuard m;
+    size_t oriLen = len;
 #if 1
     // Ensure all allocation requests are multiples of eight,
     // mirroring the actual allocation sizes employed by pymalloc
@@ -160,8 +164,13 @@ class MakeLocalAllocator {
 #else
     auto *header = (ScaleneHeader *)get_original_allocator()->malloc(ctx, len);
 #endif
+    //DEBUG("in local_malloc: %d, %d, %d", oriLen, len, allocSize);
     assert(header);  // We expect this to always succeed.
     if (!m.wasInMalloc()) {
+      //DEBUG("entering _register_malloc ...");
+      if (local_malloc_cnt > 387879) {
+        DEBUG("MakeLocalAllocator::local_malloc - %d, %d", local_malloc_cnt, len);
+      }
       TheHeapWrapper::register_malloc(len, ScaleneHeader::getObject(header));
     }
 
@@ -211,6 +220,7 @@ class MakeLocalAllocator {
     ScaleneHeader *result = new (buf) ScaleneHeader(new_size);
     if (result && !m.wasInMalloc()) {
       if (sz < new_size) {
+        //DEBUG("entering _register_malloc ...");
         TheHeapWrapper::register_malloc(new_size - sz,
                                         ScaleneHeader::getObject(result));
       } else if (sz > new_size) {

@@ -11,6 +11,8 @@ from typing import Any, Callable, Dict, List
 from scalene.scalene_leak_analysis import ScaleneLeakAnalysis
 from scalene.scalene_statistics import Filename, LineNumber, ScaleneStatistics
 
+from scalene.scalene_magics import logger
+
 
 class ScaleneJSON:
 
@@ -330,6 +332,9 @@ class ScaleneJSON:
 
             # Print out the the profile for the source, line by line.
             full_fname = os.path.normpath(os.path.join(program_path, fname))
+            if not os.access(full_fname, os.R_OK):
+                logger.warning("file: {} not exist".format(full_fname))
+                continue
             with open(full_fname, "r", encoding="utf-8") as source_file:
                 code_lines = source_file.readlines()
 

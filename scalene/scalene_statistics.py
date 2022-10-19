@@ -20,6 +20,8 @@ import cloudpickle
 # from scalene.adaptive import Adaptive
 from scalene.runningstats import RunningStats
 
+from scalene.scalene_magics import logger
+
 Address = NewType("Address", str)
 Filename = NewType("Filename", str)
 LineNumber = NewType("LineNumber", int)
@@ -291,6 +293,7 @@ class ScaleneStatistics:
                 fn_stats.leak_score[fn_name][first_line_no][1]
                 + self.leak_score[filename][line_no][1],
             )
+            logger.info("fn_name: {}, first_line_no: {}, value: {}, {}".format(fn_name, first_line_no, fn_stats.memory_max_footprint[fn_name][first_line_no], self.memory_max_footprint[filename][line_no]))
             fn_stats.memory_max_footprint[fn_name][first_line_no] = max(
                 fn_stats.memory_max_footprint[fn_name][first_line_no],
                 self.memory_max_footprint[filename][line_no],
@@ -423,6 +426,7 @@ class ScaleneStatistics:
                     for lineno in x.bytei_map[filename]:
                         v = x.bytei_map[filename][lineno]
                         self.bytei_map[filename][lineno] |= v
+                        logger.info('memory_max_footprint - filename: {}, lineno: {}, value: {}, {}'.format(filename, lineno, self.memory_max_footprint[filename][lineno], x.memory_max_footprint[filename][lineno]))
                         self.memory_max_footprint[filename][lineno] = max(
                             self.memory_max_footprint[filename][lineno],
                             x.memory_max_footprint[filename][lineno],

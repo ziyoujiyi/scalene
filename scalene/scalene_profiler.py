@@ -67,6 +67,8 @@ else:
 
 from scalene.scalene_parseargs import ScaleneParseArgs, StopJupyterExecution
 from scalene.scalene_sigqueue import ScaleneSigQueue
+from scalene.scalene_magics import logger
+
 
 MINIMUM_PYTHON_VERSION_MAJOR = 3
 MINIMUM_PYTHON_VERSION_MINOR = 7
@@ -133,6 +135,7 @@ class Scalene:
     __profiler_html = "profiler.html"
     __error_message = "Error in program being profiled"
     BYTES_PER_MB = 1024 * 1024
+    __malloc_sample_cnt = 0
 
     MALLOC_ACTION = "M"
     FREE_ACTION = "F"
@@ -161,6 +164,7 @@ class Scalene:
 
     __output.gpu = __gpu.has_gpu()
     __json.gpu = __gpu.has_gpu()
+    print(">>> gpu is dectected! ", __gpu.has_gpu())
     __invalidate_queue: List[Tuple[Filename, LineNumber]] = []
     __invalidate_mutex: threading.Lock
 
@@ -507,6 +511,7 @@ class Scalene:
         sys.settrace(Scalene.invalidate_lines)
         f.f_trace = Scalene.invalidate_lines
         f.f_trace_lines = True
+        #logger.info('malloc_signal_handler frame.f_trace: {}'.format(f.f_trace))
         del this_frame
 
     @staticmethod
@@ -520,6 +525,7 @@ class Scalene:
         this_frame: Optional[FrameType],
     ) -> None:
         """Handle free signals."""
+        #logger.info('free_signal_handler frame: {}'.format(this_frame))
         if this_frame:
             Scalene.enter_function_meta(this_frame, Scalene.__stats)
         Scalene.__alloc_sigq.put([0])
@@ -625,6 +631,7 @@ class Scalene:
                 sys.exit(1)
 
         Scalene.__signals.set_timer_signals(arguments.use_virtual_time)
+        logger.info('arguments.pid: {}'.format(arguments.pid))
         if arguments.pid:
             # Child process.
             # We need to use the same directory as the parent.
@@ -668,9 +675,11 @@ class Scalene:
                 sys.executable,
                 cmdline,
             )
+            logger.info('payload: {}'.format(payload))
             # Now create all the files.
             for name in Scalene.__all_python_names:
                 fname = os.path.join(Scalene.__python_alias_dir, name)
+                logger.info('created file name: {}'.format(fname))
                 with open(fname, "w") as file:
                     file.write(payload)
                 os.chmod(fname, stat.S_IXUSR | stat.S_IRUSR | stat.S_IWUSR)
@@ -1170,6 +1179,8 @@ class Scalene:
                         ByteCodeIndex(int(bytei_str)),
                     )
                 )
+                if LineNumber(int(reported_lineno)) == 34:
+                    logger.info(arr[-1])
 
         # Iterate through the array to compute the new current footprint
         # and update the global __memory_footprint_samples. Since on some systems,
@@ -1177,6 +1188,8 @@ class Scalene:
         before = max(stats.current_footprint, 0)
         prevmax = stats.max_footprint
         freed_last_trigger = 0
+        Scalene.__malloc_sample_cnt += 1
+        logger.info("malloc_sample_cnt: {}, arr_sz: {}".format(Scalene.__malloc_sample_cnt, len(arr)))
         for item in arr:
             (
                 _alloc_time,
@@ -1192,6 +1205,7 @@ class Scalene:
             count /= Scalene.BYTES_PER_MB
             if is_malloc:
                 stats.current_footprint += count
+                logger.info("is-malloc - mem_current_foorprint: {}".format(stats.current_footprint))
                 if stats.current_footprint > stats.max_footprint:
                     stats.max_footprint = stats.current_footprint
                     stats.max_footprint_loc = (fname, lineno)
@@ -1201,6 +1215,7 @@ class Scalene:
                     Scalene.FREE_ACTION_SAMPLED,
                 ]
                 stats.current_footprint -= count
+                logger.info("is-free - mem_current_foorprint: {}".format(stats.current_footprint))
                 # Force current footprint to be non-negative; this
                 # code is needed because Scalene can miss some initial
                 # allocations at startup.
@@ -1279,6 +1294,7 @@ class Scalene:
                 ] += stats.memory_current_highwater_mark[last_file][last_line]
 
                 stats.memory_current_footprint[last_file][last_line] = 0
+                logger.info("clear memory_current_footprint ?????, last_file: {}, last_line: {}".format(last_file, last_line))
                 stats.memory_current_highwater_mark[last_file][last_line] = 0
                 continue
 
@@ -1297,6 +1313,7 @@ class Scalene:
                 stats.total_memory_malloc_samples += count
                 # Update current and max footprints for this file & line.
                 stats.memory_current_footprint[fname][lineno] += count
+                logger.info("is-malloc - fname: {}, linno: {}, memory_current_footprint: {}".format(fname, lineno, stats.memory_current_footprint[fname][lineno]))
                 if (
                     stats.memory_current_footprint[fname][lineno]
                     > stats.memory_current_highwater_mark[fname][lineno]
@@ -1308,10 +1325,12 @@ class Scalene:
                     stats.memory_current_highwater_mark[fname][lineno],
                     stats.memory_current_footprint[fname][lineno],
                 )
+                #logger.info("fn_name: {}, first_line_no: {}, value: {}, {}".format(fname, lineno, stats.memory_current_footprint[fname][lineno], stats.memory_max_footprint[fname][lineno]))
                 stats.memory_max_footprint[fname][lineno] = max(
                     stats.memory_current_footprint[fname][lineno],
                     stats.memory_max_footprint[fname][lineno],
                 )
+                logger.info("is-malloc - fname: {}, linno: {}, memory_max_footprint: {}".format(fname, lineno, stats.memory_max_footprint[fname][lineno]))
             else:
                 assert action in [
                     Scalene.FREE_ACTION,
@@ -1322,6 +1341,7 @@ class Scalene:
                 stats.memory_free_count[fname][lineno] += 1
                 stats.total_memory_free_samples += count
                 stats.memory_current_footprint[fname][lineno] -= count
+                logger.info("is-free - fname: {}, linno: {}, memory_current_footprint: {}".format(fname, lineno, stats.memory_current_footprint[fname][lineno]))
                 # Ensure that we never drop the current footprint below 0.
                 stats.memory_current_footprint[fname][lineno] = max(
                     0, stats.memory_current_footprint[fname][lineno]
@@ -1384,6 +1404,7 @@ class Scalene:
         # Note: __parent_pid of the topmost process is its own pid.
         Scalene.__pid = Scalene.__parent_pid
         if "off" not in Scalene.__args or not Scalene.__args.off:
+            logger.info('profiler is off in child process!')
             Scalene.enable_signals()
 
     @staticmethod
@@ -1634,6 +1655,7 @@ class Scalene:
         # Run the code being profiled.
         exit_status = 0
         try:
+            #logger.info('the_globals: {}, the_locals: {}'.format(the_globals, the_locals))
             exec(code, the_globals, the_locals)
         except SystemExit as se:
             # Intercept sys.exit and propagate the error code.

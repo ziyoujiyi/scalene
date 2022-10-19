@@ -17,6 +17,7 @@
 
 #include <atomic>
 #include <random>
+#include <typeinfo>
 
 // We're unable to use the limited API because, for example,
 // there doesn't seem to be a function returning co_filename
@@ -67,7 +68,7 @@ class SampleHeap : public SuperHeap {
                       // attempts to read from it
 
     get_signal_init_lock().lock();
-    auto old_malloc = signal(MallocSignal, SIG_IGN);
+    auto old_malloc = signal(MallocSignal, SIG_IGN);  // capture MallocSignal
     if (old_malloc != SIG_DFL) {
       signal(MallocSignal, old_malloc);
     }
@@ -80,6 +81,11 @@ class SampleHeap : public SuperHeap {
 
   ATTRIBUTE_ALWAYS_INLINE inline void* malloc(size_t sz) {
     MallocRecursionGuard g;
+    if (!g.wasInMalloc()) {
+      static int malloc_cnt;
+      malloc_cnt++;
+      DEBUG("SampleHeap::malloc %d, %d", malloc_cnt, sz);
+    }
     auto ptr = SuperHeap::malloc(sz);
     if (unlikely(ptr == nullptr)) {
       return nullptr;
@@ -91,6 +97,9 @@ class SampleHeap : public SuperHeap {
           // Don't count these allocations
           return ptr;
         }
+        static int malloc_in_python_cnt;
+        malloc_in_python_cnt++;
+        DEBUG("SampleHeap::malloc_in_python_cnt %d, %d", malloc_in_python_cnt, realSize);
         register_malloc(realSize, ptr, false);  // false -> invoked from C/C++
       }
     }
@@ -134,6 +143,7 @@ class SampleHeap : public SuperHeap {
     SuperHeap::free(ptr);
     if (buf) {
       if (sz < buf_size) {
+        //DEBUG("entering _register_malloc ...");
         register_malloc(buf_size - sz, buf,
                         false);  // false -> invoked from C/C++
       } else if (sz > buf_size) {
@@ -154,6 +164,12 @@ class SampleHeap : public SuperHeap {
       int bytei;
       decltype(whereInPython)* where = p_whereInPython;
       if (where != nullptr && where(filename, lineno, bytei)) {
+        if (inPythonAllocator) {
+          static int register_malloc_inPythonAllocator_cnt;
+          register_malloc_inPythonAllocator_cnt++;
+          DEBUG("register_malloc register_malloc_inPythonAllocator_cnt: %d, %d", register_malloc_inPythonAllocator_cnt, realSize);
+        }
+        // DEBUG("walks the python stack >>> inPythonAllocator: %d, filename: %s, lineno: %d, realSize: %d", inPythonAllocator, filename.c_str(), lineno, realSize);
         writeCount(MallocSignal, realSize, ptr, filename, lineno, bytei);
       }
       mallocTriggered()++;
@@ -175,9 +191,11 @@ class SampleHeap : public SuperHeap {
     std::string filename;
     int lineno;
     int bytei;
-
     decltype(whereInPython)* where = p_whereInPython;
     if (where != nullptr && where(filename, lineno, bytei)) {
+      static int register_malloc_process_malloc_cnt;
+      register_malloc_process_malloc_cnt++;
+      DEBUG("register_malloc register_malloc_process_malloc_cnt: %d, %d", register_malloc_process_malloc_cnt, sampleMalloc);
       writeCount(MallocSignal, sampleMalloc, ptr, filename, lineno, bytei);
 #if !SCALENE_DISABLE_SIGNALS
       raise(MallocSignal);
